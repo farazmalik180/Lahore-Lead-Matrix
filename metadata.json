@@ -1,0 +1,8 @@
+{
+  "name": "Lahore Lead Matrix",
+  "description": "Geospatial lead generation and market gap analysis tool for commercial real estate in DHA Lahore Phase 4.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
