@@ -1,69 +1,88 @@
-import { useState, useMemo } from 'react';
-import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useAdvancedMarkerRef } from '@vis.gl/react-google-maps';
+import { useState, useMemo, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, MapPin, BarChart3, Filter, ExternalLink, RefreshCw, Layers, LayoutDashboard } from 'lucide-react';
+import { Search, MapPin, BarChart3, Filter, ExternalLink, RefreshCw, Layers, LayoutDashboard, AlertCircle } from 'lucide-react';
 import { Lead } from './types';
 import { DHA_PHASE_4_SECTORS, INITIAL_LEADS } from './constants';
 import { cn } from './lib/utils';
+import { generateLeads } from './services/aiService';
 
-const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || '';
-const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
+// Fix for default marker icons in Leaflet
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIconRetina from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
-function MapSplash() {
+const DefaultIcon = L.icon({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIconRetina,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+function LeadMarker({ lead, isActive, onClick }: { lead: Lead, isActive: boolean, onClick: () => void }) {
+  const position = useMemo(() => {
+    const seed = parseInt(lead.id) || 0;
+    return [
+      31.474 + (Math.abs(Math.sin(seed)) - 0.5) * 0.012,
+      74.375 + (Math.abs(Math.cos(seed)) - 0.5) * 0.012
+    ] as [number, number];
+  }, [lead.id]);
+
+  const customIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div class="w-6 h-6 rounded-full border-2 border-white shadow-lg flex items-center justify-center" style="background-color: ${isActive ? '#4f46e5' : lead.priority === 'High' ? '#ef4444' : '#f59e0b'}">
+            <div class="w-2 h-2 bg-white rounded-full"></div>
+           </div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12]
+  });
+
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center space-y-4">
-      <div className="p-4 bg-slate-100 rounded-full">
-        <MapPin className="w-8 h-8 text-slate-400" />
-      </div>
-      <div>
-        <h3 className="text-lg font-medium text-slate-900">Google Maps API Key Required</h3>
-        <p className="text-sm text-slate-500 max-w-sm mx-auto mt-2">
-          To visualize the geospatial data for DHA Phase 4, please add your GOOGLE_MAPS_PLATFORM_KEY to the secrets panel.
-        </p>
-      </div>
-      <a 
-        href="https://console.cloud.google.com/google/maps-apis/start" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-      >
-        Get API Key
-      </a>
-    </div>
+    <Marker 
+      position={position} 
+      icon={customIcon}
+      eventHandlers={{
+        click: onClick,
+      }}
+    >
+      <Popup className="custom-popup" offset={[0, -5]}>
+        <div className="p-1 min-w-[180px]">
+          <h4 className="font-bold text-slate-900 leading-tight">{lead.name}</h4>
+          <p className="text-[9px] uppercase font-bold text-slate-400 mt-1">{lead.category} • {lead.priority} Priority</p>
+          <div className="mt-2 text-[11px] text-slate-600 leading-snug">{lead.gapReason}</div>
+        </div>
+      </Popup>
+    </Marker>
   );
 }
 
-function LeadMarker({ lead, isActive, onClick }: { lead: Lead, isActive: boolean, onClick: () => void, key?: string }) {
-  const [markerRef, marker] = useAdvancedMarkerRef();
-  const position = useMemo(() => ({
-    lat: 31.474 + (Math.random() - 0.5) * 0.015,
-    lng: 74.375 + (Math.random() - 0.5) * 0.015
-  }), []);
+function SectorMarker({ sector }: { sector: any }) {
+  const customIcon = L.divIcon({
+    className: 'sector-icon',
+    html: `<div class="px-3 py-1 bg-white/95 border-2 border-indigo-100 shadow-sm rounded-lg text-[10px] font-black uppercase tracking-tighter text-indigo-600 flex flex-col items-center">
+             ${sector.id}
+             <span class="text-[7px] text-slate-400 -mt-1 font-bold">SECTOR</span>
+           </div>`,
+    iconSize: [60, 30],
+    iconAnchor: [30, 15]
+  });
 
   return (
-    <>
-      <AdvancedMarker
-        ref={markerRef}
-        position={position}
-        onClick={onClick}
-      >
-        <Pin 
-          background={isActive ? '#4f46e5' : lead.priority === 'High' ? '#ef4444' : '#f59e0b'} 
-          glyphColor="#fff" 
-          scale={isActive ? 1.2 : 1}
-        />
-      </AdvancedMarker>
-      {isActive && (
-        <InfoWindow anchor={marker} onCloseClick={onClick}>
-          <div className="p-2 min-w-[200px] bg-white">
-            <h4 className="font-bold text-slate-900">{lead.name}</h4>
-            <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">{lead.category} • {lead.priority} Priority</p>
-            <div className="mt-2 text-xs text-slate-600 leading-snug">{lead.gapReason}</div>
-          </div>
-        </InfoWindow>
-      )}
-    </>
+    <Marker position={[sector.center.lat, sector.center.lng]} icon={customIcon} interactive={false} />
   );
+}
+
+function ChangeView({ center, zoom }: { center: [number, number], zoom: number }) {
+  const map = useMap();
+  map.setView(center, zoom);
+  return null;
 }
 
 export default function App() {
@@ -71,12 +90,42 @@ export default function App() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isResearching, setIsResearching] = useState(false);
   const [leads, setLeads] = useState<Lead[]>(INITIAL_LEADS);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleResearch = () => {
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => 
+      l.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [leads, searchTerm]);
+
+  const mapCenter = useMemo(() => {
+    if (selectedLeadId) {
+      const selectedLead = leads.find(l => l.id === selectedLeadId);
+      if (selectedLead) {
+        const seed = parseInt(selectedLead.id) || 0;
+        return [
+          31.474 + (Math.abs(Math.sin(seed)) - 0.5) * 0.012,
+          74.375 + (Math.abs(Math.cos(seed)) - 0.5) * 0.012
+        ] as [number, number];
+      }
+    }
+    return [31.473, 74.375] as [number, number];
+  }, [selectedLeadId, leads]);
+
+  const handleResearch = async () => {
     setIsResearching(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      const newLeads = await generateLeads();
+      setLeads(newLeads);
+    } catch (err: any) {
+      console.error(err);
+      setError("AI Generation failed. Please verify your API Key in Settings.");
+    } finally {
       setIsResearching(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -89,7 +138,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight uppercase italic">Lahore Lead Matrix</h1>
-              <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400 font-black">Geospatial GAP Agent v4.0</p>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-slate-400 font-black">Geospatial GAP Agent v4.1</p>
             </div>
           </div>
           
@@ -116,14 +165,28 @@ export default function App() {
 
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-              <span>DHA4-GRID-ACTIVE</span>
+              <span className={cn(
+                "w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]",
+                isResearching ? "bg-amber-500" : "bg-green-500"
+              )} />
+              <span>{isResearching ? "PROCESS-RUNNING" : "DHA4-GRID-ACTIVE"}</span>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold uppercase"
+          >
+            <AlertCircle className="w-4 h-4" />
+            {error}
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           <div className="lg:col-span-4 space-y-6">
@@ -132,6 +195,7 @@ export default function App() {
               <button 
                 onClick={handleResearch}
                 disabled={isResearching}
+                title="Trigger AI Research Scan"
                 className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={cn("w-4 h-4", isResearching && "animate-spin")} />
@@ -143,79 +207,87 @@ export default function App() {
               <input 
                 type="text" 
                 placeholder="FILTER ENTITIES..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-1 focus:ring-indigo-600 transition-all outline-none text-xs font-bold uppercase tracking-wider"
               />
             </div>
 
             <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-280px)] pr-2 custom-scrollbar">
               <AnimatePresence>
-                {leads.map((lead) => (
-                  <motion.div
-                    key={lead.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    whileHover={{ y: -2 }}
-                    onClick={() => setSelectedLeadId(lead.id === selectedLeadId ? null : lead.id)}
-                    className={cn(
-                      "p-5 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden",
-                      selectedLeadId === lead.id 
-                        ? "bg-white border-indigo-600 shadow-xl shadow-indigo-100/50 ring-1 ring-indigo-600" 
-                        : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
-                    )}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="max-w-[70%]">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-[0.1em]",
-                          lead.priority === 'High' ? "bg-red-50 text-red-600 border border-red-100" : "bg-amber-50 text-amber-600 border border-amber-100"
-                        )}>
-                          {lead.priority} GAP
-                        </span>
-                        <h3 className="text-base font-black mt-2 leading-tight uppercase group-hover:text-indigo-600 transition-colors tracking-tight">{lead.name}</h3>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-black text-slate-300 group-hover:text-indigo-100 transition-colors">#{lead.id.padStart(3, '0')}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 mt-4">
-                      <div className="px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                        {lead.category}
-                      </div>
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        <div className="h-1 bg-slate-100 flex-1 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${lead.expansionScore * 10}%` }}
-                            className="h-full bg-indigo-600" 
-                          />
+                {filteredLeads.length > 0 ? (
+                  filteredLeads.map((lead) => (
+                    <motion.div
+                      key={lead.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      whileHover={{ y: -2 }}
+                      onClick={() => setSelectedLeadId(lead.id === selectedLeadId ? null : lead.id)}
+                      className={cn(
+                        "p-5 rounded-2xl border transition-all cursor-pointer group relative overflow-hidden",
+                        selectedLeadId === lead.id 
+                          ? "bg-white border-indigo-600 shadow-xl shadow-indigo-100/50 ring-1 ring-indigo-600" 
+                          : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
+                      )}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="max-w-[70%]">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-[0.1em]",
+                            lead.priority === 'High' ? "bg-red-50 text-red-600 border border-red-100" : "bg-amber-50 text-amber-600 border border-amber-100"
+                          )}>
+                            {lead.priority} GAP
+                          </span>
+                          <h3 className="text-base font-black mt-2 leading-tight uppercase group-hover:text-indigo-600 transition-colors tracking-tight">{lead.name}</h3>
                         </div>
-                        <span className="text-[10px] font-black text-slate-900">{lead.expansionScore}</span>
-                      </div>
-                    </div>
-
-                    {selectedLeadId === lead.id && (
-                      <motion.div 
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-6 pt-4 border-t border-slate-100 space-y-4"
-                      >
-                        <div>
-                          <p className="text-slate-400 font-bold mb-1 uppercase tracking-tighter text-[9px]">Root Intelligence</p>
-                          <p className="text-xs text-slate-600 leading-relaxed font-medium italic">"{lead.gapReason}"</p>
+                        <div className="text-right">
+                          <p className="text-[10px] font-black text-slate-300 group-hover:text-indigo-100 transition-colors">#{lead.id.toString().padStart(3, '0')}</p>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-indigo-600 min-w-0">
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                            <p className="text-[10px] font-bold truncate">{lead.contact}</p>
+                      </div>
+                      
+                      <div className="flex items-center gap-4 mt-4">
+                        <div className="px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                          {lead.category}
+                        </div>
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <div className="h-1 bg-slate-100 flex-1 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${lead.expansionScore * 10}%` }}
+                              className="h-full bg-indigo-600" 
+                            />
                           </div>
-                          <p className="text-[9px] font-black uppercase text-slate-400">Expand Branch</p>
+                          <span className="text-[10px] font-black text-slate-900">{lead.expansionScore}</span>
                         </div>
-                      </motion.div>
-                    )}
-                  </motion.div>
-                ))}
+                      </div>
+
+                      {selectedLeadId === lead.id && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="mt-6 pt-4 border-t border-slate-100 space-y-4"
+                        >
+                          <div>
+                            <p className="text-slate-400 font-bold mb-1 uppercase tracking-tighter text-[9px]">Root Intelligence</p>
+                            <p className="text-xs text-slate-600 leading-relaxed font-medium italic">"{lead.gapReason}"</p>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-indigo-600 min-w-0">
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                              <p className="text-[10px] font-bold truncate">{lead.contact}</p>
+                            </div>
+                            <p className="text-[9px] font-black uppercase text-slate-400">Expand Branch</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 text-slate-400 text-xs font-bold uppercase tracking-widest">
+                    No leads match filter
+                  </div>
+                )}
               </AnimatePresence>
             </div>
           </div>
@@ -227,49 +299,37 @@ export default function App() {
                   <div className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Live Grid Visualization</span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   {DHA_PHASE_4_SECTORS.map(s => (
                     <div key={s.id} className="text-[9px] font-bold text-slate-400 px-2 py-0.5 bg-slate-50 border border-slate-100 rounded uppercase">{s.id}</div>
                   ))}
                 </div>
               </div>
 
-              <div className="flex-grow bg-slate-50 relative">
-                {hasValidKey ? (
-                  <APIProvider apiKey={API_KEY} version="weekly">
-                    <Map
-                      defaultCenter={{ lat: 31.473, lng: 74.375 }}
-                      defaultZoom={14}
-                      mapId="MAP_LAYOUT_DHA4"
-                      disableDefaultUI={true}
-                      zoomControl={true}
-                      internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
-                      className="w-full h-full"
-                    >
-                      {leads.map(lead => (
-                        <LeadMarker 
-                          key={lead.id} 
-                          lead={lead} 
-                          isActive={selectedLeadId === lead.id}
-                          onClick={() => setSelectedLeadId(lead.id === selectedLeadId ? null : lead.id)}
-                        />
-                      ))}
-                      {DHA_PHASE_4_SECTORS.map(sector => (
-                        <AdvancedMarker 
-                          key={sector.id} 
-                          position={sector.center}
-                        >
-                          <div className="px-3 py-1.5 bg-white/95 border-2 border-indigo-100 shadow-sm rounded-lg text-[10px] font-black uppercase tracking-tighter text-indigo-600 flex flex-col items-center">
-                            {sector.id}
-                            <span className="text-[7px] text-slate-400 -mt-1 font-bold">SECTOR</span>
-                          </div>
-                        </AdvancedMarker>
-                      ))}
-                    </Map>
-                  </APIProvider>
-                ) : (
-                  <MapSplash />
-                )}
+              <div className="flex-grow bg-slate-50 relative z-0">
+                <MapContainer
+                  center={mapCenter}
+                  zoom={14}
+                  className="w-full h-full"
+                  zoomControl={false}
+                >
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  />
+                  <ChangeView center={mapCenter} zoom={selectedLeadId ? 16 : 14} />
+                  {leads.map(lead => (
+                    <LeadMarker 
+                      key={lead.id} 
+                      lead={lead} 
+                      isActive={selectedLeadId === lead.id}
+                      onClick={() => setSelectedLeadId(lead.id === selectedLeadId ? null : lead.id)}
+                    />
+                  ))}
+                  {DHA_PHASE_4_SECTORS.map(sector => (
+                    <SectorMarker key={sector.id} sector={sector} />
+                  ))}
+                </MapContainer>
 
                 <div className="absolute top-6 left-6 p-4 bg-white/95 backdrop-blur shadow-2xl rounded-2xl border border-slate-200 max-w-[240px] space-y-3">
                    <div className="flex items-center gap-2 mb-1">
@@ -310,7 +370,7 @@ export default function App() {
             >
               <div className="p-8 border-b border-slate-100 flex justify-between items-center">
                 <div>
-                  <h2 className="text-4xl font-black uppercase tracking-tighter italic italic-serif">Market Gap Analysis</h2>
+                  <h2 className="text-4xl font-black uppercase tracking-tighter italic">Market Gap Analysis</h2>
                   <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] mt-2">Lahore Geospatial Intelligence Node 01</p>
                 </div>
                 <button onClick={() => setActiveTab('leads')} className="p-4 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
@@ -383,9 +443,13 @@ export default function App() {
               </div>
 
               <div className="p-8 border-t border-slate-100 bg-slate-50/50">
-                <button className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-2xl shadow-indigo-200 flex items-center justify-center gap-4 active:scale-[0.98]">
-                  <BarChart3 className="w-4 h-4" />
-                  INITIATE SYSTEM RE-SCAN
+                <button 
+                  onClick={handleResearch}
+                  disabled={isResearching}
+                  className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-2xl shadow-indigo-200 flex items-center justify-center gap-4 active:scale-[0.98] disabled:opacity-50"
+                >
+                  <RefreshCw className={cn("w-4 h-4", isResearching && "animate-spin")} />
+                  {isResearching ? "SCANNING GRID..." : "INITIATE SYSTEM RE-SCAN"}
                 </button>
               </div>
             </motion.div>

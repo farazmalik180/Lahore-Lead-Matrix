@@ -1,20 +1,33 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Lahore Lead Matrix 📍
 
-# Run and deploy your AI Studio app
+A geospatial lead generation and market gap analysis tool specializing in commercial real estate and business distribution for **DHA Lahore Phase 4**.
 
-This contains everything you need to run your app locally.
+## 🚀 Overview
+This tool identifies successful businesses in Lahore (specifically Gulberg and DHA Phases 5/6) that currently lack a presence in DHA Phase 4, highlighting high-potential expansion opportunities.
 
-View your app in AI Studio: https://ai.studio/apps/bfb79223-ecbb-4aa7-a8f6-753abb78f6a3
+## 🛠 Features
+- **AI-Powered Gap Analysis**: Uses **Groq (Llama 3.3)** to identify real-world business expansions and market voids.
+- **Geospatial Visualization**: Interactive map powered by **OpenStreetMap** (no API key/billing required for mapping).
+- **Sector Intelligence**: Breakdown of Sercors AA, BB, CC, XX, and DD commercial velocity.
+- **Priority Filtering**: Categorizes leads by "High" or "Medium" based on distance from existing branches.
 
-## Run Locally
+## 🔑 Setup
+To run the AI research agent, you need an API key from [GroqCloud](https://console.groq.com/).
 
-**Prerequisites:**  Node.js
+1. Open **Settings** > **Secrets** in AI Studio.
+2. Add a new secret:
+   - **Key**: `GROQ_API_KEY`
+   - **Value**: `your_groq_api_key_here`
+3. (Optional) `GEMINI_API_KEY` is supported as a fallback.
 
+## 🗺 Technology Stack
+- **Frontend**: React 19, Vite, Tailwind CSS 4.
+- **Maps**: Leaflet & React-Leaflet (OpenStreetMap).
+- **AI**: Groq SDK (Llama 3.3 70B).
+- **Animations**: Motion (Framer Motion).
+- **Icons**: Lucide React.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 📊 Operational Phases
+1. **Reasoning**: Analyzes demographic data for DHA Phase 4 (High-income residential).
+2. **Research**: Scans for expanding brands in Gulberg and neighboring DHA phases.
+3. **Filtering**: Applies "Gap Criteria" to ensure no current branch exists within a 2km radius.
